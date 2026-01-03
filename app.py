@@ -14,7 +14,7 @@ print(client)
 db = client["call_detail"]
 collection = db["call_detail"]
 
-@app.route("/add-call", methods=["POST"])
+@app.route("/add-call", methods=["GET","POST"])
 def add_call():
     data = request.json
     print(data)
@@ -30,7 +30,23 @@ def add_call():
         "message": "Call detail inserted",
         "id": str(result.inserted_id)
     }), 201
+def serialize(doc):
+    doc["_id"] = str(doc["_id"])
+    if "timestamp" in doc or doc["timestamp"]:
+        doc["timestamp"] = doc["timestamp"].isoformat()
+    return doc
 
+
+@app.route("/get-calls", methods=["GET"])
+def get_calls():
+    docs = collection.find()
+    result = []
+
+    for doc in docs:
+        doc["_id"] = str(doc["_id"])  # ONLY this is required
+        result.append(doc)
+
+    return jsonify(result)
 
 if __name__ == "__main__":
     app.run(debug=True)
