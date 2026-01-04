@@ -48,6 +48,43 @@ def get_calls():
 
     return jsonify(result)
 
+@app.route("/delete-all", methods=["DELETE"])
+def delete_all_calls():
+    result = collection.delete_many({})
+
+    return jsonify({
+        "message": "All records deleted successfully",
+        "deleted_count": result.deleted_count
+    })
+
+@app.route("/filter-calls", methods=["GET"])
+def filter_calls():
+    owner = request.args.get("owner")
+    call_number = request.args.get("callee")
+    query = {"owner": owner}
+    if call_number:
+        num = call_number.replace(" ", "")
+        code = "91"
+        # remove +91 if exists
+        if code in num:
+            num = num[2:]
+
+        query["$or"] = [
+            {"call_number": num},
+            {"call_number": "+91" + num}
+        ]
+        
+    else:
+        query = { "owner": owner }
+
+    docs = collection.find(query)
+    result = []
+
+    for doc in docs:
+        doc["_id"] = str(doc["_id"])
+        result.append(doc)
+
+    return jsonify(result)
 if __name__ == "__main__":
     app.run(debug=True)
 
