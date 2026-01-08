@@ -78,7 +78,53 @@ def call_stats():
         })
 
 
+@app.route("/call-stats-datewise", methods=["GET"])
+def call_stats_datewise():
+    number = request.args.get("number")
+    start_date = request.args.get("start")  # optional, format: YYYY-MM-DD
+    end_date = request.args.get("end")      # optional, format: YYYY-MM-DD
 
+    if not number:
+        return jsonify({"error": "Number is required"}), 400
+
+    # Build number query (ignore +91)
+    query = {
+        "$or": [
+            {"owner": number},
+            {"owner": "+91" + number}
+        ]
+    }
+
+    # Optional date filter
+    if start_date or end_date:
+        query["timestamp"] = {}
+        if start_date:
+            start_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000)
+            query["timestamp"]["$gte"] = start_ts
+        if end_date:
+            # add 1 day to include end_date fully
+            end_ts = int((datetime.strptime(end_date, "%Y-%m-%d").timestamp() + 86400) * 1000)
+            query["timestamp"]["$lt"] = end_ts
+
+    pipeline = [
+        {"$match": query},
+        {
+            "$group": {
+                "_id": {
+                    "$dateToString": {"format": "%Y-%m-%d", "date": {"$toDate": "$timestamp"}}
+                },
+                "total_calls": {"$sum": 1},
+                "incoming_calls": {"$sum": {"$cond": [{"$eq": ["$type", "INCOMING"]}, 1, 0]}},
+                "outgoing_calls": {"$sum": {"$cond": [{"$eq": ["$type", "OUTGOING"]}, 1, 0]}},
+                "missed_calls": {"$sum": {"$cond": [{"$eq": ["$type", "MISSED"]}, 1, 0]}},
+                "total_duration": {"$sum": {"$toInt": "$duration"}}
+            }
+        },
+        {"$sort": {"_id": 1}}  # sort by date ascending
+    ]
+
+    stats = list(collection.aggregate(pipeline))
+    return jsonify(stats)
 
 @app.route("/get-calls", methods=["GET"])
 def get_calls():
