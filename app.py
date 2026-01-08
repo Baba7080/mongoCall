@@ -56,26 +56,32 @@ def delete_all_calls():
         "message": "All records deleted successfully",
         "deleted_count": result.deleted_count
     })
+def normalize_number(num):
+    num = num.replace(" ", "").replace("-", "")
+    
+    if num.startswith("+91"):
+        return num[3:]
+    elif num.startswith("91"):
+        return num[2:]
+    elif num.startswith("091"):
+        return num[3:]
+    return num
 
 @app.route("/filter-calls", methods=["GET"])
 def filter_calls():
     owner = request.args.get("owner")
     call_number = request.args.get("callee")
+
     query = {"owner": owner}
+
     if call_number:
-        num = call_number.replace(" ", "")
-        code = "91"
-        # remove +91 if exists
-        if code in num:
-            num = num[2:]
+        num = normalize_number(call_number)
 
         query["$or"] = [
             {"call_number": num},
-            {"call_number": "+91" + num}
+            {"call_number": "+91" + num},
+            {"call_number": "91" + num}
         ]
-        
-    else:
-        query = { "owner": owner }
 
     docs = collection.find(query)
     result = []
@@ -85,6 +91,37 @@ def filter_calls():
         result.append(doc)
 
     return jsonify(result)
+
+# def filter_calls():
+#     owner = request.args.get("owner")
+#     call_number = request.args.get("callee")
+#     query = {"owner": owner}
+#     if call_number:
+#         num = call_number.replace(" ", "")
+#         code = "91"
+#         # remove +91 if exists
+#         if code in num:
+#             num = num[2:]
+
+#         query["$or"] = [
+#             {"call_number": num},
+#             {"call_number": "+91" + num}
+#         ]
+        
+#     else:
+#         query = { "owner": owner }
+
+#     docs = collection.find(query)
+#     result = []
+
+#     for doc in docs:
+#         doc["_id"] = str(doc["_id"])
+#         result.append(doc)
+
+#     return jsonify(result)
+
+
+
 if __name__ == "__main__":
     app.run(debug=True)
 
