@@ -37,6 +37,49 @@ def serialize(doc):
     return doc
 
 
+@app.route("/call-stats", methods=["GET"])
+def call_stats():
+    number = request.args.get("number")
+    if not number:
+        return jsonify({"error": "Number is required"}), 400
+
+    # Match numbers ignoring +91
+    query = {
+        "$or": [
+            {"owner": number},
+            {"owner": "+91" + number}
+        ]
+    }
+
+    pipeline = [
+        {"$match": query},
+        {
+            "$group": {
+                "_id": None,
+                "total_calls": {"$sum": 1},
+                "incoming_calls": {"$sum": {"$cond": [{"$eq": ["$type", "INCOMING"]}, 1, 0]}},
+                "outgoing_calls": {"$sum": {"$cond": [{"$eq": ["$type", "OUTGOING"]}, 1, 0]}},
+                "missed_calls": {"$sum": {"$cond": [{"$eq": ["$type", "MISSED"]}, 1, 0]}},
+                "total_duration": {"$sum": {"$toInt": "$duration"}}
+            }
+        }
+    ]
+
+    stats = list(collection.aggregate(pipeline))
+    if stats:
+        return jsonify(stats[0])
+    else:
+        return jsonify({
+            "total_calls": 0,
+            "incoming_calls": 0,
+            "outgoing_calls": 0,
+            "missed_calls": 0,
+            "total_duration": 0
+        })
+
+
+
+
 @app.route("/get-calls", methods=["GET"])
 def get_calls():
     docs = collection.find()
