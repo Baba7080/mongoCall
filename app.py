@@ -1,10 +1,11 @@
 from flask import Flask, request, jsonify
 from pymongo import MongoClient
-from datetime import datetime
+from datetime import datetime , timedelta
 import os
 from urllib.parse import quote_plus
 
-app = Flask(__name__)
+
+app = Flask(_name_)
 
 password = "Abhi@6394"
 # MongoClient(MONGO_URI)
@@ -126,16 +127,50 @@ def call_stats_datewise():
     stats = list(collection.aggregate(pipeline))
     return jsonify(stats)
 
+
+def ymd_to_timestamp_range(from_date, to_date):
+    # Start of FROM date (00:00:00)
+    start_dt = datetime.strptime(from_date, "%Y-%m-%d")
+
+    # End of TO date (23:59:59.999)
+    end_dt = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1) - timedelta(milliseconds=1)
+
+    return (
+        int(start_dt.timestamp() * 1000),
+        int(end_dt.timestamp() * 1000)
+    )
 @app.route("/get-calls", methods=["GET"])
 def get_calls():
-    docs = collection.find()
+    from_date = request.args.get("from")  # YYYY-MM-DD
+    to_date = request.args.get("to")      # YYYY-MM-DD
+
+    query = {}
+
+    if from_date and to_date:
+        from_ts, to_ts = ymd_to_timestamp_range(from_date, to_date)
+        query["timestamp"] = {
+            "$gte": from_ts,
+            "$lte": to_ts
+        }
+
+    docs = collection.find(query)
     result = []
 
     for doc in docs:
-        doc["_id"] = str(doc["_id"])  # ONLY this is required
+        doc["_id"] = str(doc["_id"])
         result.append(doc)
 
     return jsonify(result)
+
+# def get_calls():
+#     docs = collection.find()
+#     result = []
+
+#     for doc in docs:
+#         doc["_id"] = str(doc["_id"])  # ONLY this is required
+#         result.append(doc)
+
+#     return jsonify(result)
 
 @app.route("/delete-all", methods=["DELETE"])
 def delete_all_calls():
@@ -211,7 +246,7 @@ def filter_calls():
 
 
 
-if __name__ == "__main__":
+if _name_ == "_main_":
     app.run(debug=True)
 
 # from flask import Flask, request, jsonify
@@ -219,7 +254,7 @@ if __name__ == "__main__":
 # from urllib.parse import quote_plus
 
 
-# app = Flask(__name__)
+# app = Flask(_name_)
 
 # password = "Abhi@6394"
 
@@ -258,5 +293,5 @@ if __name__ == "__main__":
 
 
 # # ---------------- RUN SERVER ----------------
-# if __name__ == "__main__":
+# if _name_ == "_main_":
 #     app.run(debug=True)
