@@ -1,11 +1,11 @@
 from flask import Flask, request, jsonify
-from pymongo import MongoClient
+from pymongo import MongoClient , ASCENDING
 from datetime import datetime , timedelta
 import os
 from urllib.parse import quote_plus
 
 
-app = Flask(_name_)
+app = Flask(__name__)
 
 password = "Abhi@6394"
 # MongoClient(MONGO_URI)
@@ -161,7 +161,104 @@ def get_calls():
         result.append(doc)
 
     return jsonify(result)
+@app.route("/delete-duplicate", methods=["GET"])
+def delete_query():
+    collection.create_index(
+        [
+            ("id", ASCENDING),
+            ("owner", ASCENDING),
+            ("call_number", ASCENDING),
+            ("timestamp", ASCENDING)
+        ]
+    )
 
+    seen = set()
+    batch = []
+    BATCH_SIZE = 1000
+    deleted = 0
+
+    cursor = collection.find(
+        {},
+        {"id": 1, "owner": 1, "call_number": 1, "timestamp": 1}
+    ).sort([
+        ("id", 1),
+        ("owner", 1),
+        ("call_number", 1),
+        ("timestamp", 1)
+    ])
+
+    for doc in cursor:
+        key = (
+            doc.get("id"),
+            doc.get("owner"),
+            doc.get("call_number"),
+            doc.get("timestamp")
+        )
+
+        if key in seen:
+            batch.append(doc["_id"])
+        else:
+            seen.add(key)
+
+        if len(batch) >= BATCH_SIZE:
+            result = collection.delete_many({"_id": {"$in": batch}})
+            deleted += result.deleted_count
+            batch.clear()
+
+    if batch:
+        result = collection.delete_many({"_id": {"$in": batch}})
+        deleted += result.deleted_count
+
+    return jsonify({
+        "status": "success",
+        "deleted_duplicates": deleted
+    })
+def get_multi_user_call_stats(collection):
+    start_date = request.args.get("start")  # YYYY-MM-DD
+    end_date = request.args.get("end")      # YYYY-MM-DD
+    users = request.args.getlist("users")   # ?users=9236..&users=9876..
+
+    if not start_date or not end_date:
+        return jsonify({"error": "start and end date required"}), 400
+
+    # Convert date → timestamp (ms)
+    start_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000)
+    end_ts = int(
+        (datetime.strptime(end_date, "%Y-%m-%d").timestamp() + 86400) * 1000
+    )
+
+    match_query = {
+        "timestamp": {"$gte": start_ts, "$lt": end_ts}
+    }
+
+    # Optional: filter specific users
+    if users:
+        match_query["owner"] = {"$in": users}
+
+    pipeline = [
+        {"$match": match_query},
+        {
+            "$group": {
+                "_id": "$owner",
+                "total_calls": {"$sum": 1},
+                "incoming_calls": {
+                    "$sum": {"$cond": [{"$eq": ["$type", "INCOMING"]}, 1, 0]}
+                },
+                "outgoing_calls": {
+                    "$sum": {"$cond": [{"$eq": ["$type", "OUTGOING"]}, 1, 0]}
+                },
+                "missed_calls": {
+                    "$sum": {"$cond": [{"$eq": ["$type", "MISSED"]}, 1, 0]}
+                },
+                "total_duration": {"$sum": {"$toInt": "$duration"}}
+            }
+        },
+        {"$sort": {"_id": 1}}
+    ]
+
+    data = list(collection.aggregate(pipeline))
+
+    return jsonify(data)
 # def get_calls():
 #     docs = collection.find()
 #     result = []
@@ -246,7 +343,7 @@ def filter_calls():
 
 
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     app.run(debug=True)
 
 # from flask import Flask, request, jsonify
@@ -254,7 +351,7 @@ if _name_ == "_main_":
 # from urllib.parse import quote_plus
 
 
-# app = Flask(_name_)
+# app = Flask(__name__)
 
 # password = "Abhi@6394"
 
@@ -293,5 +390,5 @@ if _name_ == "_main_":
 
 
 # # ---------------- RUN SERVER ----------------
-# if _name_ == "_main_":
+# if __name__ == "__main__":
 #     app.run(debug=True)
